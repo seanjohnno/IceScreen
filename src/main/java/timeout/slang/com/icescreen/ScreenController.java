@@ -6,7 +6,7 @@ import android.view.View;
 import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 
-public abstract class Screen {
+public abstract class ScreenController {
 
     /*------------------------------------------------------------------------------------------
      * Constants
@@ -53,6 +53,11 @@ public abstract class Screen {
     protected SafeRef<Context> getContext() {
         return mScreenManager.getContext();
     }
+
+    /**
+     * Called after onCreateView - setConfiguration
+     */
+    protected void onSetActive() { }
 
     /*------------------------------------------------------------------------------------------
      * Protected Methods - Called by ScreenManager

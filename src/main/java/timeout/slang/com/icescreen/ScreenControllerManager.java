@@ -6,16 +6,14 @@ import android.os.Looper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.animation.AlphaAnimation;
 import android.view.animation.Animation;
 import android.widget.FrameLayout;
 
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.zip.Inflater;
 
-public class ScreenManager {
+public class ScreenControllerManager {
 
     /*------------------------------------------------------------------------------------------
      * Private Members
@@ -34,7 +32,7 @@ public class ScreenManager {
     /**
      * Stack of screens
      */
-    private List<Screen> mScreens = new ArrayList<>();
+    private List<ScreenController> mScreens = new ArrayList<>();
 
     /**
      * Flag to indicate whether the manager is initialised or not
@@ -78,23 +76,23 @@ public class ScreenManager {
     }
 
     /*------------------------------------------------------------------------------------------
-     * Public Methods - Screen Ops
+     * Public Methods - ScreenController Ops
      ------------------------------------------------------------------------------------------*/
 
     /**
      * Add a screen to the stack and display it
      * @param screen
      */
-    public void pushScreen(final Screen screen) {
+    public void pushScreen(final ScreenController screen) {
         //Throw exception if we're not on main thread
         assertMainThread("pushScreen() - Not main thread would mean a call to setContentView while we may not have Activity");
 
         // Grab previous screen (if there is one)
-        final Screen prevScreen = peekScreen();
+        final ScreenController prevScreen = peekScreen();
 
         // Set new screen as current
         mScreens.add(screen);
-        screen.setScreenManager(ScreenManager.this);
+        screen.setScreenManager(ScreenControllerManager.this);
 
         // Create a FrameLayout as our root for animating both screens
         FrameLayout animView = new FrameLayout(mContext);
@@ -107,11 +105,14 @@ public class ScreenManager {
         }
 
         // Get next screen and add it to animView
-        final View next = screen.onCreateView(LayoutInflater.from(mContext));
+        final View next = screen.createView(LayoutInflater.from(mContext));
         animView.addView(mView = next);
 
         // Set our animation view as the root
         mContext.setContentView(animView);
+
+        // Tell screen the view has been added
+        peekScreen().onSetActive();
 
         Animation pushAnim = screen.getOnPushAnimation();
         pushAnim.setAnimationListener(new Animation.AnimationListener() {
@@ -133,7 +134,7 @@ public class ScreenManager {
     /**
      * @return      Currently displayed screen (top of stack)
      */
-    public Screen peekScreen() {
+    public ScreenController peekScreen() {
         // TODO - Assert this as well?7
 
         return mScreens.isEmpty() ? null : mScreens.get(mScreens.size() - 1);
@@ -142,17 +143,17 @@ public class ScreenManager {
     /**
      * @return      Remove the current screen and display content of the one underneath
      */
-    public Screen popScreen() {
+    public ScreenController popScreen() {
         //Throw exception if we're not on main thread
         assertMainThread("pushScreen() - Not main thread would mean a call to setContentView while we may not have Activity");
 
         // Grab current screen & view
-        final Screen curScreen = mScreens.remove(mScreens.size() - 1);
+        final ScreenController curScreen = mScreens.remove(mScreens.size() - 1);
         final View curView = mView;
 
         // Get screen underneath and create matching view
-        final Screen underneath = peekScreen();
-        final View underneathView = underneath != null ? underneath.onCreateView(LayoutInflater.from(mContext)) : null;
+        final ScreenController underneath = peekScreen();
+        final View underneathView = underneath != null ? underneath.createView(LayoutInflater.from(mContext)) : null;
 
         // Create a FrameLayout as our root for animating both screens + add screen that'll be revealed
         FrameLayout animView = new FrameLayout(mContext);
@@ -166,6 +167,11 @@ public class ScreenManager {
 
         // Set our animation view as the root
         mContext.setContentView(animView);
+
+        // Tell underlying screen it's been added
+        if(underneath != null) {
+            underneath.onSetActive();
+        }
 
         Animation popAnim = curScreen.getOnPopAnimation();
         popAnim.setAnimationListener(new Animation.AnimationListener() {
@@ -216,6 +222,12 @@ public class ScreenManager {
      * Called by containing class right on onPause
      */
     protected void onPreContextChange() {
+        // Inform top level screen theres about to be a config change
+        ScreenController curScreen = peekScreen();
+        if(curScreen != null) {
+            curScreen.onPreConfigurationChange();
+        }
+
         // Remove hard references to context and view tree
         mContext = null;
         mView = null;
@@ -228,8 +240,13 @@ public class ScreenManager {
     protected void onContextChange(Activity context) {
         mContext = context;
 
-        // Display one underneath if we have one
         setContentView();
+
+        // Tell screen it's active
+        ScreenController active = peekScreen();
+        if(active != null) {
+            active.onSetActive();
+        }
     }
 
     /**
@@ -255,7 +272,7 @@ public class ScreenManager {
 
     private void setContentView() {
         if(!mScreens.isEmpty()) {
-            mContext.setContentView(mView = peekScreen().onCreateView(LayoutInflater.from(mContext)));
+            mContext.setContentView(mView = peekScreen().createView(LayoutInflater.from(mContext)));
         }
     }
 
